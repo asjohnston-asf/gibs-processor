@@ -1,0 +1,165 @@
+Parameters:
+
+  InputTopicArn:
+    Type: String
+
+  OutputTopicArn:
+    Type: String
+
+  EarthdataUsername:
+    Type: String
+
+  EarthdataPassword:
+    Type: String
+    NoEcho: true
+
+  OutputAccountNumber:
+    Type: String
+
+  OutputOrgId:
+    Type: String
+
+Resources:
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        IgnorePublicAcls: True
+        BlockPublicPolicy: True
+        RestrictPublicBuckets: True
+      LifecycleConfiguration:
+        Rules:
+          - Status: Enabled
+            ExpirationInDays: 3
+          - Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: DAR
+          Value: "NO"
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            Principal:
+              AWS: !Ref OutputAccountNumber
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Effect: Allow
+            Resource: !Sub "${Bucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "aws:PrincipalOrgID": !Ref OutputOrgId
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 300
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 2
+
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt Queue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref InputTopicArn
+      Queues:
+        - !Ref Queue
+
+  Subscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref InputTopicArn
+      Protocol: sqs
+      Endpoint: !GetAtt Queue.Arn
+
+  Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: src/
+      Handler: main.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      Environment:
+        Variables:
+          EARTHDATA_USERNAME: !Ref EarthdataUsername
+          EARTHDATA_PASSWORD: !Ref EarthdataPassword
+          OUTPUT_BUCKET: !Ref Bucket
+          OUTPUT_TOPIC_ARN: !Ref OutputTopicArn
+
+  LambdaEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref Lambda
+      BatchSize: 10
+      EventSourceArn: !GetAtt Queue.Arn
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Lambda}"
+      RetentionInDays: 90
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Action: sts:AssumeRole
+          Principal:
+            Service: lambda.amazonaws.com
+          Effect: Allow
+      ManagedPolicyArns:
+        - !Ref LambdaPolicy
+
+  LambdaPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+          - Effect: Allow
+            Action: sqs:*
+            Resource: !GetAtt Queue.Arn
+          - Effect: Allow
+            Action: s3:PutObject
+            Resource: !GetAtt Bucket.Arn
+          - Effect: Allow
+            Action: sns:publish
+            Resource: !Ref OutputTopicArn
