@@ -16,7 +16,7 @@ Parameters:
   GibsOrgId:
     Type: String
 
-  GibsQueueUrl:
+  GibsTopicArn:
     Type: String
 
 Resources:
@@ -113,7 +113,7 @@ Resources:
           EARTHDATA_USERNAME: !Ref EarthdataUsername
           EARTHDATA_PASSWORD: !Ref EarthdataPassword
           BUCKET: !Ref Bucket
-          QUEUE_URL: !Ref GibsQueueUrl
+          TOPIC_ARN: !Ref GibsTopicArn
 
   LambdaEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
@@ -162,4 +162,4 @@ Resources:
             Resource: !GetAtt Bucket.Arn
           - Effect: Allow
             Action: sns:publish
-            Resource: !Ref OutputTopicArn
+            Resource: !Ref GibsTopicArn
