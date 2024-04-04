@@ -3,9 +3,6 @@ Parameters:
   InputTopicArn:
     Type: String
 
-  OutputTopicArn:
-    Type: String
-
   EarthdataUsername:
     Type: String
 
@@ -13,10 +10,13 @@ Parameters:
     Type: String
     NoEcho: true
 
-  OutputAccountNumber:
+  GibsAccountNumber:
     Type: String
 
-  OutputOrgId:
+  GibsOrgId:
+    Type: String
+
+  GibsQueueUrl:
     Type: String
 
 Resources:
@@ -51,7 +51,7 @@ Resources:
         Version: 2012-10-17
         Statement:
             Principal:
-              AWS: !Ref OutputAccountNumber
+              AWS: !Ref GibsAccountNumber
             Action:
               - s3:GetObject
               - s3:ListBucket
@@ -59,7 +59,7 @@ Resources:
             Resource: !Sub "${Bucket.Arn}/*"
             Condition:
               StringEquals:
-                "aws:PrincipalOrgID": !Ref OutputOrgId
+                "aws:PrincipalOrgID": !Ref GibsOrgId
 
   DeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -112,8 +112,8 @@ Resources:
         Variables:
           EARTHDATA_USERNAME: !Ref EarthdataUsername
           EARTHDATA_PASSWORD: !Ref EarthdataPassword
-          OUTPUT_BUCKET: !Ref Bucket
-          OUTPUT_TOPIC_ARN: !Ref OutputTopicArn
+          BUCKET: !Ref Bucket
+          QUEUE_URL: !Ref GibsQueueUrl
 
   LambdaEventSourceMapping:
     Type: AWS::Lambda::EventSourceMapping
