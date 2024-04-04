@@ -35,7 +35,7 @@ def create_gibs_image(output_filename, vv_filename, vh_filename):
     return output_filename
 
 
-def build_gibs_message(granule_ur: str, bucket: str, key: str) -> dict:
+def build_gibs_message(granule_ur: str, bucket: str, key: str, size: int) -> dict:
     return {
         # TODO confirm with GIBS what they actually need in this message
         'identifier': granule_ur,
@@ -47,7 +47,7 @@ def build_gibs_message(granule_ur: str, bucket: str, key: str) -> dict:
                 'name': os.path.basename(key),
                 'type': 'browse',
                 # TODO get file size
-                'size': 0,
+                'size': size,
                 'uri': f's3://{bucket}/{key}',
             },
         },
@@ -75,9 +75,10 @@ def process_granule(granule_ur):
         # TODO deal with non VV+VH granules
         vh_filename, vv_filename = sorted(download_tifs(granule_ur, temp_dir))
         create_gibs_image(local_filename, vv_filename, vh_filename)
+        size = os.stat(local_filename).st_size
         s3.upload_file(local_filename, bucket, key)
 
-    message = build_gibs_message(granule_ur, bucket, key)
+    message = build_gibs_message(granule_ur, bucket, key, size)
     sns.publish(TopicArn=topic_arn, Message=message)
 
 
