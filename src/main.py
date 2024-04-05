@@ -38,6 +38,7 @@ def create_gibs_image(output_filename, vv_filename, vh_filename):
 def build_gibs_message(granule_ur: str, bucket: str, key: str, size: int) -> dict:
     return {
         # TODO confirm with GIBS what they actually need in this message
+        # https://github.com/podaac/cloud-notification-message-schema
         'identifier': granule_ur,
         'collection': 'OPERA_L2_RTC-S1_V1',
         'submissionTime': datetime.datetime.now(datetime.timezone.utc).isoformat(),
